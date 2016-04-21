@@ -1,5 +1,9 @@
-# HMcode
+# <a name="top"></a>HMcode
+*[HMcode Original](#original)
+*[Warm and Fuzzy DM](#WarmFuzzy)
 
+--------------------------------
+### <a name="original"></a>HMcode Original
 This code is produces the matter power spectrum using the halo-model approach described in Mead et al. (2015; http://arxiv.org/abs/1505.07833). Appendix B of that paper details the methods for doing the calculation. It also now includes some small updates from Mead et al. (2016).
 
 If you use this work, or this code, I would be very grateful if you were to cite the original paper, and the updated paper if you use results from that. The code itself can also be cited: http://ascl.net/1508.001
@@ -34,8 +38,6 @@ Updated the code a little so that it no longer calculates a range in nu and simp
 UPDATE February 4th, 2016
 Included updates from Mead et al. (2016) including parameterising the two-halo damping term in terms of f(sigma_v) and slightly recalibrated values of alpha and f_damp. Now works for w(a)CDM models, where w(a)=w_0+(1.-a)*w_a.
 
-######
-
 Adding in a CAMB linear P(k)
 
 Given the differences between CAMB and Eisenstein + Hu (1998) one might wish to make HMcode read in a linear CAMB power spectrum and work with that instead (or any other tabulated power spectrum). This is fine, and is what I did when comparing to Cosmic Emu in the paper (where the difference between CAMB and Eisenstein + Hu *was* important) but there is a subtle thing to bear in mind:
@@ -43,5 +45,22 @@ Given the differences between CAMB and Eisenstein + Hu (1998) one might wish to 
 The halo-model calculation does integrals that are technically defined over the entire k range from 0 to inf. In practice contributions from very small and large scales are suppressed but the integration routines still need to know about the power at these scales sometimes, otherwise they may go bonkers. Obviously this is a problem given that one usually has a tabulated linear power spectrum defined on some finite range in k. The way I dealt with this was to read in the linear spectrum but then extrapolate if the code called 'p_lin' for k values below the minimum, or above the maximum, using physically motivated extrapolations. For example you know that the linear power spectrum is a power-law down to k->0 (\Delta^2 \propto k^{3+n}) and the high-k part can be approximated as \Delta^2 \propto k^{n-1}log(k)^2. 
 
 I have left my routines to do this in as 'find_Tk' and 'find_pk', and these carry out the correct extrapolation beyond the boundaries of either a P(k) table or T(k) table. These can be switched on using the 'itk' variable. Originally itk=3, which means the code uses Eisenstein + Hu (1998). If itk=4 is set then the code will look for an input table of k/h vs. T(k) and if itk=5 is set it will look for k/h vs. P(k). These input files need to be specified at run time (e.g. ./a.out input_tk.dat).
+
+-------------------------------
+### <a name="WarmFuzzy"></a>Warm and Fuzzy DM
+This addition is by David Marsh. Beta Version.
+
+Simple: modify just the power
+Added FDM and WDM transfer functions. Added option ifdm and iwdm to include them.
+
+Complicated: add a mass dependent barrier
+Added option ibarrier to do this. Added two functions, benson and marsh for the modified barriers. Benson is correct. Marsh one is a fudge for now Use barrier function to create new look up table nuST which is the modified barrier.  change mmin=1.e6, as otherwise you get NaNs way below the MF cut off
+
+NOTE: The modified barrier is *only* passed into the ST mass function in the integrand. Otherwise you get an extra term appearing which makes the one halo term negative at large k, which is inconsistent (it is the logarithmic derivative of \delta, which is large and negative at low M). Including only in ST is consistent with the definitions in Marsh and Silk. Check on Benson. 
+
+This all matters because integrals are converted to \nu space by Mead, which makes certain assumptions. What we really want to do is do the integral in \sigma space. I think this is consistent with the principles of PS when the barrier depends on mass, and consistent with all Mead’s changes of variables. You use the variance at z=0 to define the mass, and ask how this compares to a moving barrier, even if the barrier has mass dependence. See also subhalo notes on measures.
+
+
+More complicated: change halo density profiles and concentration: Haven’t started on this yet.
 
 
