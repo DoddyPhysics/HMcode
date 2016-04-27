@@ -58,10 +58,12 @@ PROGRAM HMcode
   WRITE(*,*)
 
   !Set number of k points and k range (log spaced)
-  nk=200
+  nk=2000
   kmin=0.001
-  kmax=1.e4
+  kmax=1.e1
   CALL fill_table(kmin,kmax,k,nk,1)
+
+
 
   WRITE(*,*) 'k min:', kmin
   WRITE(*,*) 'k max:', kmax
@@ -69,9 +71,9 @@ PROGRAM HMcode
   WRITE(*,*)
 
   !Set the number of redshifts and range (linearly spaced)
-  nz=31
-  zmin=3.
-  zmax=6.
+  nz=10
+  zmin=0.
+  zmax=9.
   CALL fill_table(zmin,zmax,ztab,nz,0)
 
   WRITE(*,*) 'z min:', zmin
@@ -123,7 +125,7 @@ PROGRAM HMcode
   END DO
   WRITE(*,*)
 
-  output='power.dat'
+  output='cdm_HM.dat'
   WRITE(*,fmt='(A19,A10)') 'Writing output to:', TRIM(output)
   WRITE(*,*)
   WRITE(*,*) 'The top row of the file contains the redshifts (the first entry is hashes - #####)'
@@ -336,12 +338,23 @@ CONTAINS
 
     !Calls expressions for one- and two-halo terms and then combines
     !to form the full power spectrum
+	
+	!!!!!!!!!!!!!!!!!
+	! DM: the halo model should only apply if sigma>1 on some scale
+	! added if statement based on sigma at smallest radius
+    ! use lookup table sigma for speed
+	!!!!!!!!!!!!!!!!!
+
     IF(k==0.) THEN
        p1h=0.
        p2h=0.
-    ELSE
-       p1h=p_1h(k,z,lut,cosm)
-       p2h=p_2h(k,z,plin,lut,cosm)
+    ELSE IF(cosm%sigma1d(1)*grow(z,cosm).le.1) THEN
+	   p2h=p_2h(k,z,plin,lut,cosm)
+	   !write(*,*)'power is linear at z=',z
+	   p1h=0
+	ELSE 
+	   p2h=p_2h(k,z,plin,lut,cosm)
+       p1h=p_1h(k,z,lut,cosm)       
     END IF
 
     alp=alpha(lut,cosm)
@@ -415,23 +428,23 @@ CONTAINS
     TYPE(cosmology) :: cosm
     LOGICAL :: lexist
 
-    cosm%om_m=0.266
+    cosm%om_m=0.312945
     cosm%om_v=1.-cosm%om_m
-    cosm%om_b=0.0449
+    cosm%om_b=0.04894300387714018
     cosm%om_c=cosm%om_m-cosm%om_b
-    cosm%h=0.71
+    cosm%h=0.6715
     cosm%w=-1.
-    cosm%sig8=0.801
-    cosm%n=0.963
+    cosm%sig8=0.851707637    
+    cosm%n=0.9436
     cosm%wa=0.
 
-    cosm%iwdm=1 ! turns wdm on and off
+    cosm%iwdm=0 ! turns wdm on and off
     cosm%m_wdm=1. ! wdm mass in keV
 
 	cosm%ifdm=0 ! turns fdm on and off
-    cosm%m_fdm=1. ! fdm mass in 1e-22 eV
+    cosm%m_fdm=1.e-2 ! fdm mass in 1e-22 eV
     
-	cosm%ibarrier=1 ! turn on and off barrier for FCDM and WDM
+	cosm%ibarrier=0 ! turn on and off barrier for FCDM and WDM
 
 	IF(cosm%ifdm==1 .AND. cosm%iwdm==1) STOP 'error: cannot have WDM and FDM on at same time!'
 	IF(cosm%ibarrier==1 .AND. cosm%ifdm==1) STOP 'error: mass depedent barriers for FDM not correct yet!'
@@ -1182,8 +1195,8 @@ CONTAINS
 
     USE cosdef
     IMPLICIT NONE
-    REAL :: rmin, rmax
     REAL, ALLOCATABLE :: rtab(:), sigtab(:)
+  	REAL :: rmin, rmax 
     REAL :: r, sig
     INTEGER :: i, nsig
     TYPE(cosmology) :: cosm
@@ -1200,10 +1213,10 @@ CONTAINS
     IF(ALLOCATED(cosm%r_sigma)) DEALLOCATE(cosm%r_sigma)
     IF(ALLOCATED(cosm%sigma1d)) DEALLOCATE(cosm%sigma1d)   
 
-    !These values of 'r' work fine for any power spectrum of cosmological importance
     !Having nsig as a 2** number is most efficient for the look-up routines
-    rmin=1e-4
-    rmax=1e3
+  	!These values of 'r' work fine for any power spectrum of cosmological importance
+  	rmin=1.e-4
+  	rmax=1.e3
     nsig=64
 
     IF(ihm==1) WRITE(*,*) 'SIGTAB: Filling sigma interpolation table'
