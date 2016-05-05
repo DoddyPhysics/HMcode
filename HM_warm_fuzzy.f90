@@ -12,7 +12,7 @@ MODULE cosdef
 
   TYPE tables
      !Stuff that needs to be recalculated for each new z
-	 ! DM: added nuST to LUT. This is the modified barrier that is only passed to gnu() ST mass function
+	 ! WFcode: added nuST to LUT. This is the modified barrier that is only passed to gnu() ST mass function
      REAL, ALLOCATABLE :: c(:), rv(:), nu(:), sig(:), zc(:), m(:), rr(:), sigf(:), nuST(:)
      REAL :: sigv, sigv100, c3, knl, rnl, neff, sig8z
      INTEGER :: n
@@ -125,7 +125,7 @@ PROGRAM HMcode
   END DO
   WRITE(*,*)
 
-  output='cdm_HM.dat'
+  output='m1-23_f100_HM.dat'
   WRITE(*,fmt='(A19,A10)') 'Writing output to:', TRIM(output)
   WRITE(*,*)
   WRITE(*,*) 'The top row of the file contains the redshifts (the first entry is hashes - #####)'
@@ -339,19 +339,24 @@ CONTAINS
     !Calls expressions for one- and two-halo terms and then combines
     !to form the full power spectrum
 	
-	!!!!!!!!!!!!!!!!!
-	! DM: the halo model should only apply if sigma>1 on some scale
-	! added if statement based on sigma at smallest radius
-    ! use lookup table sigma for speed
-	!!!!!!!!!!!!!!!!!
 
     IF(k==0.) THEN
        p1h=0.
        p2h=0.
-    ELSE IF(cosm%sigma1d(1)*grow(z,cosm).le.1) THEN
-	   p2h=p_2h(k,z,plin,lut,cosm)
+    
+	!!!!!!!!!!!!!!!!!
+	! DM: should the halo model should only apply if sigma>1 on some scale?
+	! This is what halofit does in e.g. CAMB.
+	! If you want to compare to CAMB's halofit, uncomment the "else if" below
+	! added if statement based on sigma at smallest radius
+    ! use lookup table sigma for speed
+	!!!!!!!!!!!!!!!!!
+	!ELSE IF(cosm%sigma1d(1)*grow(z,cosm).le.1) THEN
+	!   p2h=p_2h(k,z,plin,lut,cosm)
 	   !write(*,*)'power is linear at z=',z
-	   p1h=0
+	!   p1h=0
+	!!!!!!!!!!!!!!!
+	
 	ELSE 
 	   p2h=p_2h(k,z,plin,lut,cosm)
        p1h=p_1h(k,z,lut,cosm)       
@@ -441,14 +446,15 @@ CONTAINS
     cosm%iwdm=0 ! turns wdm on and off
     cosm%m_wdm=1. ! wdm mass in keV
 
-	cosm%ifdm=0 ! turns fdm on and off
-    cosm%m_fdm=1.e-2 ! fdm mass in 1e-22 eV
+	cosm%ifdm=1 ! turns fdm on and off
+    cosm%m_fdm=1.e-1 ! fdm mass in 1e-22 eV
     
-	cosm%ibarrier=0 ! turn on and off barrier for FCDM and WDM
-
+	cosm%ibarrier=0 ! turn on and off barrier for FDM and WDM
+	
+	IF(cosm%m_wdm.le.1.e-2) STOP 'error: WDM too light. Inaccuarate and will not fit CMB'
+	IF(cosm%m_fdm.le.1.e-2) STOP 'error: FDM too light. Inaccuarate and will not fit CMB'	
 	IF(cosm%ifdm==1 .AND. cosm%iwdm==1) STOP 'error: cannot have WDM and FDM on at same time!'
 	IF(cosm%ibarrier==1 .AND. cosm%ifdm==1) STOP 'error: mass depedent barriers for FDM not correct yet!'
-
 
   END SUBROUTINE assign_cosmology
 
@@ -568,6 +574,8 @@ CONTAINS
 
     ALLOCATE(lut%zc(n),lut%m(n),lut%c(n),lut%rv(n))
     ALLOCATE(lut%nu(n),lut%rr(n),lut%sigf(n),lut%sig(n))
+	! WFcode: added a new "nu" parameter that only appears in the HMF
+	! this is consistent with the one-halo integrals used.
 	ALLOCATE(lut%nuST(n))
 
     lut%zc=0.
@@ -599,7 +607,7 @@ CONTAINS
     REAL, INTENT(IN) :: z
     INTEGER :: i, imin, imax, n
     REAL :: rin, dr, Dv, dc, f, m, mmin, mmax, nu, r, sig
-	REAL :: calG, nuST ! DM: barrier fit for WDM/FCDM
+	REAL :: calG, nuST ! WFcode: calG is barrier fit for WDM/FDM
     !REAL, ALLOCATABLE :: rg_up(:), rg_dn(:), nu_up(:), nu_dn(:), mg_up(:), mg_dn(:)
     TYPE(cosmology) :: cosm
     TYPE(tables) :: lut
@@ -630,8 +638,13 @@ CONTAINS
     CALL allocate_lut(lut)
 
     !Mass range for halo model calculation
-    mmin=1.e6 !fudge to 1.e6 if ibarrier==1 for benson not NAN, foobar DMDMDMDMD 
-    mmax=1.e16
+	IF (cosm%ibarrier==1) THEN
+		mmin=1.e6 ! WFcode: fudge to 1.e6 if ibarrier==1 
+    ELSE
+		mmin=1.e2
+	END IF
+
+	mmax=1.e16
 
     dc=delta_c(z,cosm)
 
@@ -642,11 +655,8 @@ CONTAINS
        sig=sigma_cb(r,z,cosm)
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! DM: this is where we can change the barrier! Set nu=(dc/sig)*calG
-! DM: this is wrong! There is an additional dG/dM term necessary
-! Because Mead integrates d\nu and so we need an additional Jacobian
-! Additional term in integrand, this scaling of nu is correct.
-! Try and use look up table for G and invert for G(nu)
+! WFcode: this is where we can change the barrier! Set nu=(dc/sig)*calG
+! For discussion of why I use two nu's, see documentation.
 
        IF (cosm%ibarrier==1) THEN
 	   		IF(cosm%iwdm==1) THEN 
@@ -660,9 +670,9 @@ CONTAINS
 	        calG=1.
    	   END IF
 
-       nu=(dc/sig)
+       nu=(dc/sig) ! WFcode: This nu is used to map from nu to mass, and actually do the integral
 
-	   nuST=(dc/sig)*calG ! modified nu is only passed to ST mass function in the integral, nowhere else
+	   nuST=(dc/sig)*calG ! WFcode: modified nu is only passed to ST mass function in the integral, nowhere else
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 		
        lut%m(i)=m
@@ -677,7 +687,7 @@ CONTAINS
 
     !Fills up a table for sigma(fM) for Bullock c(m) relation
     !This is the f=0.01 parameter in the Bullock realtion sigma(fM,z)
-    f=0.01**(1./3.)
+    f=0.01**(1./3.) ! note factor of 1/3 because sigma table is R not M
     DO i=1,lut%n
        lut%sigf(i)=sigma_cb(lut%rr(i)*f,z,cosm)
     END DO
@@ -735,13 +745,13 @@ CONTAINS
   END FUNCTION radius_m
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! DM add barrier functions for WDM/FDM
+! WFcode: add barrier functions for WDM/FDM
 ! Taking mass units as h^{-1}Msol
 
   PURE FUNCTION benson(m,cosm)
 
 ! Mass-depedent barrier of Benson et al (2012), 1209.3018v2
-! Eqs. 7 to 10, fit from Barkana et al (2001)
+! Eqs. 7 to 10, fit from Barkana et al (2001), astro-ph/0102304
 
 	USE cosdef
     IMPLICIT NONE
@@ -1069,7 +1079,7 @@ CONTAINS
     REAL :: p_lin
     REAL, INTENT (IN) :: k, z
     REAL :: mu, alp ! WDM params
-	REAL :: kjeq,xj ! FCDM params
+	REAL :: kjeq,xj ! FDM params
     TYPE(cosmology), INTENT(IN) :: cosm
 
     !This gives the linear power spectrum for the model in question
@@ -1099,7 +1109,7 @@ CONTAINS
     END IF
 
 	IF(cosm%ifdm==1) THEN
-	   ! FCDM transfer function, Hu et al (2000)
+	   ! FDM transfer function, Hu et al (2000)
        kjeq=9*cosm%m_fdm**(0.5)/cosm%h ! Units used in this code are h Mpc^-1
 	   xj=1.61*cosm%m_fdm**(1./18.)*k/kjeq
        p_lin=p_lin*(cos(xj**3.)/(1+xj**8.))**2.
@@ -1157,7 +1167,7 @@ CONTAINS
 
     !Calculates the value of the integrand at all nu values!
     DO i=1,lut%n
-       g=gnu(lut%nuST(i)) ! DM: modified to pass a barrier into the Sheth-Tormen part of the integrand
+       g=gnu(lut%nuST(i)) ! WFcode: modified to pass a barrier into the Sheth-Tormen part of the integrand
        wk=win(k*(lut%nu(i)**et),lut%rv(i),lut%c(i))
        integrand(i)=(lut%rv(i)**3.)*g*(wk**2.)
     END DO
@@ -1206,7 +1216,6 @@ CONTAINS
     !and prevents a large number of calls to the sigint functions
     !rmin and rmax need to be decided in advance and are chosen such that
     !R vs. sigma(R) is approximately power-law below and above these values of R   
-    !This wouldn't be appropriate for models with a linear spectrum cut-off (e.g. WDM)
 
     !These must be not allocated before sigma calculations otherwise when sigma(r) is called
     !otherwise sigma(R) looks for the result in the tables
