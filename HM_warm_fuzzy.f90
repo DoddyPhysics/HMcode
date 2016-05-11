@@ -454,7 +454,6 @@ CONTAINS
 	IF(cosm%m_wdm.le.1.e-2) STOP 'error: WDM too light. Inaccuarate and will not fit CMB'
 	IF(cosm%m_fdm.le.1.e-2) STOP 'error: FDM too light. Inaccuarate and will not fit CMB'	
 	IF(cosm%ifdm==1 .AND. cosm%iwdm==1) STOP 'error: cannot have WDM and FDM on at same time!'
-	IF(cosm%ibarrier==1 .AND. cosm%ifdm==1) STOP 'error: mass depedent barriers for FDM not correct yet!'
 
   END SUBROUTINE assign_cosmology
 
@@ -750,7 +749,7 @@ CONTAINS
 
   PURE FUNCTION benson(m,cosm)
 
-! Mass-depedent barrier of Benson et al (2012), 1209.3018v2
+! WFcode: Mass-depedent barrier of Benson et al (2012), 1209.3018v2
 ! Eqs. 7 to 10, fit from Barkana et al (2001), astro-ph/0102304
 
 	USE cosdef
@@ -759,13 +758,12 @@ CONTAINS
     REAL, INTENT(IN) :: m
     TYPE(cosmology), INTENT(IN) :: cosm
     REAL, PARAMETER :: gx=1.5
-    REAL :: mw,omh2,zeq,benx,benh,mj
+    REAL :: mw,omh2,benx,benh,mjw
   
     mw=cosm%m_wdm
 	omh2=cosm%om_m*cosm%h**2.
-	zeq=3600.*(omh2/0.15)-1.
-	mj=cosm%h*(3.06e8*((1+zeq)/3000)**1.5*(omh2/0.15)**0.5*(gx/1.5)**(-1.)*mw**(-4.))
-    benx=log(m/mj)
+	mjw=cosm%h*(4.02e8*(omh2/0.15)**2.*(gx/1.5)**(-1.)*mw**(-4.))
+    benx=log(m/mjw)
     benh=1./(1+exp((benx+2.4)/0.1))
     benson=benh*(0.04/exp(2.3*benx))+(1-benh)*exp(0.31687/exp(0.809*benx))
 
@@ -773,17 +771,24 @@ CONTAINS
 
   PURE FUNCTION marsh(m,cosm)
 
-! This barrier is a placeholder right now.
-! Provides a reasonable fit for m22=1 only.
+! WFcode: Fit to the scale-dependent growth barrier of Marsh and Silk (2014)
+! fit is valid for G<20 which removes redshift dependence for all z<15
+! verified directly from axionCAMB (Hlozek et al, 2015) growth for 1.e23<m<1.e-21
 
 	USE cosdef
     IMPLICIT NONE
     REAL :: marsh
     REAL, INTENT(IN) :: m
     TYPE(cosmology), INTENT(IN) :: cosm
-    REAL, PARAMETER :: mstar=1.e8
-
-    marsh=(1+(m/mstar)**(-1.))
+    REAL, PARAMETER :: a1=3.4,a2=1.0,a3=1.8,a4=0.5,a5=1.7,a6=0.9
+	REAL :: ma, omh2, marshx, marshh,mjf
+	
+	ma=cosm%m_fdm
+	omh2=cosm%om_m*cosm%h**2.
+	mjf=a1*1.e8*ma**(-1.5)*(omh2/0.14)**0.25
+    marshx=m/mjf
+    marshh=0.5*tanh(mjf*(marshx-a2))
+	marsh=marshh*exp(a3*marshx**(-a4))+(1-marshh)*exp(a5*marshx**(-a6))
 
   END FUNCTION marsh
 
