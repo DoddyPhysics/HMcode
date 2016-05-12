@@ -6,6 +6,9 @@ MODULE cosdef
      REAL :: A
      INTEGER :: iwdm,ifdm,ibarrier,iconc
      REAL, ALLOCATABLE :: r_sigma(:), sigma1d(:)
+	 ! WFcode: added the CDM pieces used when iconc=1
+	 REAL, ALLOCATABLE :: r_sigmaCDM(:), sigma1dCDM(:)
+    
      REAL, ALLOCATABLE :: growth(:), a_growth(:)
      REAL, ALLOCATABLE :: ktab(:), tktab(:), pktab(:)
   END TYPE cosmology
@@ -14,8 +17,6 @@ MODULE cosdef
      !Stuff that needs to be recalculated for each new z
 	 ! WFcode: added nuST to LUT. This is the modified barrier that is only passed to gnu() ST mass function
      REAL, ALLOCATABLE :: c(:), rv(:), nu(:), sig(:), zc(:), m(:), rr(:), sigf(:), nuST(:)
-	 ! WFcode: added CDM sigma for use when iconc=1 
-	 REAL, ALLOCATABLE :: sigCDM(:)
      REAL :: sigv, sigv100, c3, knl, rnl, neff, sig8z
      INTEGER :: n
   END TYPE tables
@@ -127,7 +128,7 @@ PROGRAM HMcode
   END DO
   WRITE(*,*)
 
-  output='mf1_conc.dat'
+  output='mw1_conc.dat'
   WRITE(*,fmt='(A19,A10)') 'Writing output to:', TRIM(output)
   WRITE(*,*)
   WRITE(*,*) 'The top row of the file contains the redshifts (the first entry is hashes - #####)'
@@ -445,10 +446,10 @@ CONTAINS
     cosm%n=0.9436
     cosm%wa=0.
 
-    cosm%iwdm=0 ! turns wdm on and off
+    cosm%iwdm=1 ! turns wdm on and off
     cosm%m_wdm=1. ! wdm mass in keV
 
-	cosm%ifdm=1 ! turns fdm on and off
+	cosm%ifdm=0 ! turns fdm on and off
     cosm%m_fdm=1. ! fdm mass in 1e-22 eV
     
 	cosm%ibarrier=1 ! turn on and off barrier for FDM and WDM
@@ -489,6 +490,11 @@ CONTAINS
 
     !Fill tables of r vs. sigma(r)
     CALL fill_sigtab(cosm)
+
+	! WFcode: fill the sigmaCDM table if needed
+	IF(cosm%iconc==1)THEN
+		CALL fill_sigtabCDM(cosm)
+	END IF
 
   END SUBROUTINE initialise_cosmology
 
@@ -579,8 +585,6 @@ CONTAINS
 	! WFcode: added a new "nu" parameter that only appears in the HMF
 	! this is consistent with the one-halo integrals used.
 	ALLOCATE(lut%nuST(n))
-	! WFcode: added items for c(M) when using iconc=1
-	ALLOCATE(lut%sigCDM(n))
 
     lut%zc=0.
     lut%m=0.
@@ -591,7 +595,6 @@ CONTAINS
     lut%sigf=0.
     lut%sig=0.
 	lut%nuST=0.
-	lut%sigCDM=0.
 	
 
   END SUBROUTINE allocate_LUT
@@ -603,7 +606,6 @@ CONTAINS
 
     !Deallocates look-up tables
     DEALLOCATE(lut%zc,lut%m,lut%c,lut%rv,lut%nu,lut%rr,lut%sigf,lut%sig,lut%nuST)
-	DEALLOCATE(lut%sigCDM)
 
   END SUBROUTINE deallocate_LUT
 
@@ -615,7 +617,6 @@ CONTAINS
     INTEGER :: i, imin, imax, n
     REAL :: rin, dr, Dv, dc, f, m, mmin, mmax, nu, r, sig
 	REAL :: calG, nuST ! WFcode: calG is barrier fit for WDM/FDM
-	REAL :: sigCDM ! Wfcode: use for CDM concentration when iconc=1
     !REAL, ALLOCATABLE :: rg_up(:), rg_dn(:), nu_up(:), nu_dn(:), mg_up(:), mg_dn(:)
     TYPE(cosmology) :: cosm
     TYPE(tables) :: lut
@@ -661,10 +662,9 @@ CONTAINS
        m=exp(log(mmin)+log(mmax/mmin)*float(i-1)/float(n-1))
        r=radius_m(m,cosm)
        sig=sigma_cb(r,z,cosm)
-		! foobar
-	   sigCDM=sigma_cb(r,z,cosm)
+	
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! WFcode: this is where we can change the barrier! Set nu=(dc/sig)*calG
+! WFcode: this is where we change the barrier! Set nu=(dc/sig)*calG
 ! For discussion of why I use two nu's, see documentation.
 
        IF (cosm%ibarrier==1) THEN
@@ -690,7 +690,7 @@ CONTAINS
        lut%nu(i)=nu
 	   lut%nuST(i)=nuST
 		
-	   lut%sigCDM(i)=sigCDM
+
     END DO
 
     IF(ihm==1) WRITE(*,*) 'HALOMOD: m, r, nu, sig tables filled'
@@ -699,7 +699,17 @@ CONTAINS
     !This is the f=0.01 parameter in the Bullock realtion sigma(fM,z)
     f=0.01**(1./3.) ! note factor of 1/3 because sigma table is R not M
     DO i=1,lut%n
-       lut%sigf(i)=sigma_cb(lut%rr(i)*f,z,cosm)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! WFcode: the sigf table is only used by Bullock, and so we just change this for iconc
+
+	   IF(cosm%iconc==1) THEN
+       	lut%sigf(i)=sigma_cbCDM(lut%rr(i)*f,z,cosm) 
+	   ELSE
+		lut%sigf(i)=sigma_cb(lut%rr(i)*f,z,cosm)
+	   END IF
+	
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     END DO
     IF(ihm==1) WRITE(*,*) 'HALOMOD: sigf tables filled'  
 
@@ -853,10 +863,12 @@ CONTAINS
     A=As(cosm)
 
     !Fill the collapse z look-up table
+    ! WFcode: note that this has used the CDM sigma if iconc=1
     CALL zcoll_bull(z,cosm,lut)
 
     !Fill the concentration look-up table
     DO i=1,lut%n
+	   
 
        zf=lut%zc(i)
        lut%c(i)=A*(1.+zf)/(1.+z)
@@ -884,8 +896,6 @@ CONTAINS
        
 	   ! WFcode: added a new concentration-mass relationship, using the WDM fit from Schneider et al, 1112.0330
 	   ! Have assumed this is approprite for FDM, but note this has not been verified by simulation
-	   ! FOOBAR: this is wrong! should use cdm c, ie. CDM variance!
-	   
 	   
 	   IF(cosm%iwdm==1. .OR. cosm%ifdm==1) THEN
 		IF(cosm%iconc==1) THEN
@@ -1336,6 +1346,63 @@ FUNCTION p_cdm(k,z,cosm)
 
   END SUBROUTINE fill_sigtab
 
+SUBROUTINE fill_sigtabCDM(cosm)
+
+   USE cosdef
+   IMPLICIT NONE
+   REAL, ALLOCATABLE :: rtabCDM(:), sigtabCDM(:)
+ 	REAL :: rmin, rmax 
+   REAL :: r, sigCDM
+   INTEGER :: i, nsig
+   TYPE(cosmology) :: cosm
+
+   !This fills up tables of r vs. sigma(r) across a range in r!
+   !It is used only in look-up for further calculations of sigma(r) and not otherwise!
+   !and prevents a large number of calls to the sigint functions
+   !rmin and rmax need to be decided in advance and are chosen such that
+   !R vs. sigma(R) is approximately power-law below and above these values of R   
+
+   !These must be not allocated before sigma calculations otherwise when sigma(r) is called
+   !otherwise sigma(R) looks for the result in the tables
+   IF(ALLOCATED(cosm%r_sigmaCDM)) DEALLOCATE(cosm%r_sigmaCDM)
+   IF(ALLOCATED(cosm%sigma1dCDM)) DEALLOCATE(cosm%sigma1dCDM)   
+
+   !Having nsig as a 2** number is most efficient for the look-up routines
+ 	!These values of 'r' work fine for any power spectrum of cosmological importance
+ 	rmin=1.e-4
+ 	rmax=1.e3
+   nsig=64
+
+   IF(ihm==1) WRITE(*,*) 'SIGTABCDM: Filling sigmaCDM interpolation table'
+
+
+   ALLOCATE(rtabCDM(nsig),sigtabCDM(nsig))
+
+   DO i=1,nsig
+
+      !Equally spaced r in log
+      r=exp(log(rmin)+log(rmax/rmin)*float(i-1)/float(nsig-1))
+
+      sigCDM=sigmaCDM(r,0.,cosm)
+
+      rtabCDM(i)=r
+      sigtabCDM(i)=sigCDM
+
+   END DO
+
+   !Must be allocated after the sigtab calulation above
+   ALLOCATE(cosm%r_sigmaCDM(nsig),cosm%sigma1dCDM(nsig))
+
+   cosm%r_sigmaCDM=rtabCDM
+   cosm%sigma1dCDM=sigtabCDM
+
+   DEALLOCATE(rtabCDM,sigtabCDM)
+
+   IF(ihm==1) WRITE(*,*) 'SIGTABCDM: Done'
+   IF(ihm==1) WRITE(*,*)
+
+ END SUBROUTINE fill_sigtabCDM
+
   FUNCTION sigma(r,z,cosm)
 
     USE cosdef
@@ -1440,6 +1507,22 @@ FUNCTION p_cdm(k,z,cosm)
     sigma_cb=grow(z,cosm)*exp(find(log(r),log(cosm%r_sigma),log(cosm%sigma1d),3,3))
 
   END FUNCTION sigma_cb
+
+
+  FUNCTION sigma_cbCDM(r,z,cosm)
+
+    USE cosdef
+    REAL :: sigma_cbCDM
+    REAL, INTENT(IN) :: r, z
+    REAL :: a
+    TYPE(cosmology), INTENT(IN) :: cosm
+
+    !Finds sigma_cold from look-up tables
+    
+    sigma_cbCDM=grow(z,cosm)*exp(find(log(r),log(cosm%r_sigmaCDM),log(cosm%sigma1dCDM),3,3))
+
+  END FUNCTION sigma_cbCDM
+
 
   FUNCTION wk_tophat(x)
 
