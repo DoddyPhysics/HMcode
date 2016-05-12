@@ -4,7 +4,7 @@ MODULE cosdef
      !Contains only things that do not need to be recalculated with each new z
      REAL :: om_m, om_b, om_v, om_c, h, n, sig8, w, wa, m_wdm, m_fdm
      REAL :: A
-     INTEGER :: iwdm,ifdm,ibarrier
+     INTEGER :: iwdm,ifdm,ibarrier,iconc
      REAL, ALLOCATABLE :: r_sigma(:), sigma1d(:)
      REAL, ALLOCATABLE :: growth(:), a_growth(:)
      REAL, ALLOCATABLE :: ktab(:), tktab(:), pktab(:)
@@ -14,6 +14,8 @@ MODULE cosdef
      !Stuff that needs to be recalculated for each new z
 	 ! WFcode: added nuST to LUT. This is the modified barrier that is only passed to gnu() ST mass function
      REAL, ALLOCATABLE :: c(:), rv(:), nu(:), sig(:), zc(:), m(:), rr(:), sigf(:), nuST(:)
+	 ! WFcode: added CDM sigma for use when iconc=1 
+	 REAL, ALLOCATABLE :: sigCDM(:)
      REAL :: sigv, sigv100, c3, knl, rnl, neff, sig8z
      INTEGER :: n
   END TYPE tables
@@ -125,7 +127,7 @@ PROGRAM HMcode
   END DO
   WRITE(*,*)
 
-  output='mw1_conc.dat'
+  output='mf1_conc.dat'
   WRITE(*,fmt='(A19,A10)') 'Writing output to:', TRIM(output)
   WRITE(*,*)
   WRITE(*,*) 'The top row of the file contains the redshifts (the first entry is hashes - #####)'
@@ -443,13 +445,14 @@ CONTAINS
     cosm%n=0.9436
     cosm%wa=0.
 
-    cosm%iwdm=1 ! turns wdm on and off
+    cosm%iwdm=0 ! turns wdm on and off
     cosm%m_wdm=1. ! wdm mass in keV
 
-	cosm%ifdm=0 ! turns fdm on and off
+	cosm%ifdm=1 ! turns fdm on and off
     cosm%m_fdm=1. ! fdm mass in 1e-22 eV
     
 	cosm%ibarrier=1 ! turn on and off barrier for FDM and WDM
+	cosm%iconc=1 ! turn on and off the c(M) model for FDM and WDM
 	
 	IF(cosm%m_wdm.le.1.e-2) STOP 'error: WDM too light. Inaccuarate and will not fit CMB'
 	IF(cosm%m_fdm.le.1.e-2) STOP 'error: FDM too light. Inaccuarate and will not fit CMB'	
@@ -576,6 +579,8 @@ CONTAINS
 	! WFcode: added a new "nu" parameter that only appears in the HMF
 	! this is consistent with the one-halo integrals used.
 	ALLOCATE(lut%nuST(n))
+	! WFcode: added items for c(M) when using iconc=1
+	ALLOCATE(lut%sigCDM(n))
 
     lut%zc=0.
     lut%m=0.
@@ -586,6 +591,8 @@ CONTAINS
     lut%sigf=0.
     lut%sig=0.
 	lut%nuST=0.
+	lut%sigCDM=0.
+	
 
   END SUBROUTINE allocate_LUT
 
@@ -596,6 +603,7 @@ CONTAINS
 
     !Deallocates look-up tables
     DEALLOCATE(lut%zc,lut%m,lut%c,lut%rv,lut%nu,lut%rr,lut%sigf,lut%sig,lut%nuST)
+	DEALLOCATE(lut%sigCDM)
 
   END SUBROUTINE deallocate_LUT
 
@@ -607,6 +615,7 @@ CONTAINS
     INTEGER :: i, imin, imax, n
     REAL :: rin, dr, Dv, dc, f, m, mmin, mmax, nu, r, sig
 	REAL :: calG, nuST ! WFcode: calG is barrier fit for WDM/FDM
+	REAL :: sigCDM ! Wfcode: use for CDM concentration when iconc=1
     !REAL, ALLOCATABLE :: rg_up(:), rg_dn(:), nu_up(:), nu_dn(:), mg_up(:), mg_dn(:)
     TYPE(cosmology) :: cosm
     TYPE(tables) :: lut
@@ -652,7 +661,8 @@ CONTAINS
        m=exp(log(mmin)+log(mmax/mmin)*float(i-1)/float(n-1))
        r=radius_m(m,cosm)
        sig=sigma_cb(r,z,cosm)
-
+		! foobar
+	   sigCDM=sigma_cb(r,z,cosm)
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! WFcode: this is where we can change the barrier! Set nu=(dc/sig)*calG
 ! For discussion of why I use two nu's, see documentation.
@@ -679,7 +689,8 @@ CONTAINS
        lut%sig(i)=sig
        lut%nu(i)=nu
 	   lut%nuST(i)=nuST
-
+		
+	   lut%sigCDM(i)=sigCDM
     END DO
 
     IF(ihm==1) WRITE(*,*) 'HALOMOD: m, r, nu, sig tables filled'
@@ -825,7 +836,7 @@ CONTAINS
     INTEGER :: i
 
 	! Wfcode: the WDM and FDM half mode masses from the analytic transfer functions
-	! Foobar: not finished!
+
 	IF(cosm%iwdm==1) THEN
 		mu=1.12
 	    alp=0.052*(cosm%m_wdm**(-1.15))
@@ -873,9 +884,15 @@ CONTAINS
        
 	   ! WFcode: added a new concentration-mass relationship, using the WDM fit from Schneider et al, 1112.0330
 	   ! Have assumed this is approprite for FDM, but note this has not been verified by simulation
-
+	   ! FOOBAR: this is wrong! should use cdm c, ie. CDM variance!
+	   
+	   
 	   IF(cosm%iwdm==1. .OR. cosm%ifdm==1) THEN
-		lut%c(i)=lut%c(i)*((g_wcdm/g_lcdm)**1.5)*(1.+15.*(Mhm/lut%m(i)))**(-0.3)
+		IF(cosm%iconc==1) THEN
+			lut%c(i)=lut%c(i)*((g_wcdm/g_lcdm)**1.5)*(1.+15.*(Mhm/lut%m(i)))**(-0.3) ! Schneider fit, using CDM variance
+		ELSE
+			lut%c(i)=lut%c(i)*((g_wcdm/g_lcdm)**1.5) ! The Bullock c(M) using WDM/FDM variance
+		END IF
 	   ELSE
 		lut%c(i)=lut%c(i)*((g_wcdm/g_lcdm)**1.5)
 	   END IF
@@ -1144,6 +1161,38 @@ CONTAINS
 
   END FUNCTION p_lin
 
+! WFcode: cdm power for when iconc=1
+
+FUNCTION p_cdm(k,z,cosm)
+
+    USE cosdef
+    IMPLICIT NONE
+    REAL :: p_cdm
+    REAL, INTENT (IN) :: k, z
+    TYPE(cosmology), INTENT(IN) :: cosm
+
+    !This gives the linear power spectrum for the model in question
+    !P(k) should have been previously normalised so as to get the amplitude 'A' correct
+
+    IF(k==0.) THEN
+       !If p_lin happens to be foolishly called for 0 mode (which should never happen, but might in integrals)
+       p_cdm=0.
+    ELSE IF(k>1.e8) THEN
+       !Avoids some issues if p_lin is called for very (absurdly) high k values
+       !For some reason crashes can occur if this is the case
+       p_cdm=0.
+!    ELSE IF(cosm%itk==5) THEN
+!       !itk==5 means P(k) has been taken as an input file
+!       !In this case use the input P(k) file
+!       p_lin=(cosm%A**2.)*(grow(z,cosm)**2.)*find_pk(k,cosm)
+    ELSE
+       !In this case look for the transfer function
+       p_cdm=(cosm%A**2.)*(grow(z,cosm)**2.)*(Tk(k,cosm)**2.)*(k**(cosm%n+3.))
+    END IF
+
+
+  END FUNCTION p_cdm
+
   FUNCTION p_2h(k,z,plin,lut,cosm)
 
     USE cosdef
@@ -1306,6 +1355,26 @@ CONTAINS
     END IF
 
   END FUNCTION sigma
+
+  FUNCTION sigmaCDM(r,z,cosm)
+
+    USE cosdef
+    IMPLICIT NONE
+    REAL :: sigmaCDM
+    REAL, INTENT(IN) :: r, z
+    TYPE(cosmology), INTENT(IN) :: cosm
+
+    IF(r>=1.e-2 ) THEN
+
+       sigmaCDM=sigint0CDM(r,z,cosm)
+
+    ELSE IF(r<1.e-2) THEN
+
+       sigmaCDM=sqrt(sigint1CDM(r,z,cosm)+sigint2CDM(r,z,cosm))
+
+    END IF
+
+  END FUNCTION sigmaCDM
 
   FUNCTION sigma_v(R,z,cosm)
 
@@ -1542,6 +1611,40 @@ CONTAINS
 
   END FUNCTION sigma_integrand
 
+! WFcode: added new functions for sigma using CDM power for when iconc=1
+
+FUNCTION sigmaCDM_integrand(t,R,f,z,cosm)
+
+    USE cosdef
+    REAL :: sigmaCDM_integrand
+    REAL, INTENT(IN) :: t, R, z
+    REAL :: k, y, w_hat
+    TYPE(cosmology), INTENT(IN) :: cosm
+
+    INTERFACE
+       REAL FUNCTION f(x)
+         REAL, INTENT(IN) :: x
+       END FUNCTION f
+    END INTERFACE
+
+    !Integrand to the sigma integral in terms of t. Defined by k=(1/t-1)/f(R) where f(R) is *any* function
+
+    IF(t==0.) THEN
+       !t=0 corresponds to k=infintiy when W(kR)=0.
+       sigmaCDM_integrand=0.
+    ELSE IF(t==1.) THEN
+       !t=1 corresponds to k=0. when P(k)=0.
+       sigmaCDM_integrand=0.
+    ELSE
+       !f(R) can be *any* function of R here to improve integration speed
+       k=(-1.+1./t)/f(R)
+       y=k*R
+       w_hat=wk_tophat(y)
+       sigmaCDM_integrand=p_cdm(k,z,cosm)*(w_hat**2.)/(t*(1.-t))
+    END IF
+
+  END FUNCTION sigmaCDM_integrand
+
   FUNCTION f_rapid(r)
 
     IMPLICIT NONE
@@ -1625,6 +1728,66 @@ CONTAINS
 
   END FUNCTION sigint0
 
+FUNCTION sigint0CDM(r,z,cosm)
+
+    !Integrates between a and b until desired accuracy is reached!
+
+    USE cosdef
+    IMPLICIT NONE
+    REAL, INTENT(IN) :: r, z
+    INTEGER :: i, j, jmax
+    REAL :: sigint0CDM, acc, dx
+    INTEGER :: ninit, n
+    REAL :: x
+    REAL*8 :: sum1, sum2
+    TYPE(cosmology), INTENT(IN) :: cosm
+
+    acc=0.001
+
+    sum1=0.d0
+    sum2=0.d0
+
+    ninit=50
+    jmax=20
+    
+    DO j=1,jmax
+
+       n=ninit*2**(j-1)
+
+       !Avoids the end-points where the integrand is 0 anyway
+       DO i=2,n-1
+
+          !x is defined on the interval 0 -> 1
+          x=float(i-1)/float(n-1)
+
+          sum2=sum2+sigmaCDM_integrand(x,r,f_rapid,z,cosm)
+
+       END DO
+
+       dx=1./float(n-1)
+       sum2=sum2*dx
+       sum2=sqrt(sum2)
+
+       IF(j==1) THEN
+          sum1=sum2
+       ELSE IF(ABS(-1.+sum2/sum1)<acc) THEN
+          sigint0CDM=sum2
+          EXIT
+       ELSE IF(j==jmax) THEN
+          WRITE(*,*)
+          WRITE(*,*) 'SIGINT: r:', r
+          WRITE(*,*) 'SIGINT: Integration timed out'
+          WRITE(*,*)
+          STOP
+       ELSE
+          sum1=sum2
+          sum2=0.d0
+       END IF
+
+    END DO
+
+  END FUNCTION sigint0CDM
+
   FUNCTION sigint1(r,z,cosm)
 
     !Integrates between a and b until desired accuracy is reached!
@@ -1690,6 +1853,72 @@ CONTAINS
     END DO
 
   END FUNCTION sigint1
+
+FUNCTION sigint1CDM(r,z,cosm)
+
+    !Integrates between a and b until desired accuracy is reached!
+
+    USE cosdef
+    IMPLICIT NONE
+    REAL, INTENT(IN) :: r, z
+    INTEGER :: i, j, jmax
+    REAL :: sigint1CDM, acc, dx
+    INTEGER :: ninit, n
+    REAL :: x, fac, xmin, xmax, k
+    REAL*8 :: sum1, sum2
+    TYPE(cosmology), INTENT(IN) :: cosm
+
+    acc=0.001
+
+    sum1=0.d0
+    sum2=0.d0
+
+    ninit=50
+    jmax=20
+
+    xmin=r/(r+r**.5)
+    xmax=1.
+    
+    DO j=1,jmax
+
+       n=ninit*2**(j-1)
+
+       !Avoids the end-point where the integrand is 0 anyway
+       DO i=1,n-1
+
+          x=xmin+(xmax-xmin)*float(i-1)/float(n-1)
+
+          IF(i==1 .OR. i==n) THEN
+             fac=0.5
+          ELSE
+             fac=1.
+          END IF
+
+          k=(-1.+1./x)/r**.5
+          sum2=sum2+fac*p_cdm(k,z,cosm)*(wk_tophat(k*r)**2.)/(x*(1.-x))
+
+       END DO
+
+       dx=(xmax-xmin)/float(n-1)
+       sum2=sum2*dx
+
+       IF(j .NE. 1 .AND. ABS(-1.+sum2/sum1)<acc) THEN
+          sigint1CDM=sum2
+          EXIT
+       ELSE IF(j==jmax) THEN
+          WRITE(*,*)
+          WRITE(*,*) 'SIGINT1: r:', r
+          WRITE(*,*) 'SIGINT1: Integration timed out'
+          WRITE(*,*)
+          STOP
+       ELSE
+          sum1=sum2
+          sum2=0.d0
+       END IF
+
+    END DO
+
+  END FUNCTION sigint1CDM
 
   FUNCTION sigint2(r,z,cosm)
 
@@ -1758,6 +1987,76 @@ CONTAINS
     END DO
 
   END FUNCTION sigint2
+
+FUNCTION sigint2CDM(r,z,cosm)
+
+  !Integrates between a and b until desired accuracy is reached!
+
+  USE cosdef
+  IMPLICIT NONE
+  REAL, INTENT(IN) :: r, z
+  INTEGER :: i, j, jmax
+  REAL :: sigint2CDM, acc, dx
+  INTEGER :: ninit, n
+  REAL :: x, fac, xmin, xmax, A
+  REAL*8 :: sum1, sum2
+  TYPE(cosmology), INTENT(IN) :: cosm
+
+  acc=0.001
+
+  sum1=0.d0
+  sum2=0.d0
+
+  ninit=50
+  jmax=20
+
+  !How far to go out in 1/r units for integral
+  A=10.
+
+  xmin=1./r
+  xmax=A/r
+  
+  DO j=1,jmax
+
+     n=ninit*2**(j-1)
+
+     DO i=1,n
+
+        x=xmin+(xmax-xmin)*float(i-1)/float(n-1)
+
+        IF(i==1 .OR. i==n) THEN
+           fac=0.5
+        ELSE
+           fac=1.
+        END IF          
+
+        !Integrate linearly in k for the rapidly oscillating part
+        sum2=sum2+fac*p_cdm(x,z,cosm)*(wk_tophat(x*r)**2.)/x
+
+     END DO
+
+     dx=(xmax-xmin)/float(n-1)
+     sum2=sum2*dx
+
+     IF(j .NE. 1 .AND. ABS(-1.+sum2/sum1)<acc) THEN
+        sigint2CDM=sum2
+        EXIT
+     ELSE IF(j==jmax) THEN
+        WRITE(*,*)
+        WRITE(*,*) 'SIGINT2: r:', r
+        WRITE(*,*) 'SIGINT2: Integration timed out'
+        WRITE(*,*)
+        STOP
+     ELSE
+        sum1=sum2
+        sum2=0.d0
+     END IF
+
+  END DO
+
+END FUNCTION sigint2CDM
+
+
 
   FUNCTION win(k,rv,c)
 
