@@ -60,7 +60,7 @@ PROGRAM HMcode
   !Set number of k points and k range (log spaced)
   nk=2000
   kmin=0.001
-  kmax=1.e1
+  kmax=1.e4
   CALL fill_table(kmin,kmax,k,nk,1)
 
 
@@ -71,9 +71,9 @@ PROGRAM HMcode
   WRITE(*,*)
 
   !Set the number of redshifts and range (linearly spaced)
-  nz=10
+  nz=15
   zmin=0.
-  zmax=9.
+  zmax=14.
   CALL fill_table(zmin,zmax,ztab,nz,0)
 
   WRITE(*,*) 'z min:', zmin
@@ -125,7 +125,7 @@ PROGRAM HMcode
   END DO
   WRITE(*,*)
 
-  output='m1-23_f100_HM.dat'
+  output='mw1_conc.dat'
   WRITE(*,fmt='(A19,A10)') 'Writing output to:', TRIM(output)
   WRITE(*,*)
   WRITE(*,*) 'The top row of the file contains the redshifts (the first entry is hashes - #####)'
@@ -443,13 +443,13 @@ CONTAINS
     cosm%n=0.9436
     cosm%wa=0.
 
-    cosm%iwdm=0 ! turns wdm on and off
+    cosm%iwdm=1 ! turns wdm on and off
     cosm%m_wdm=1. ! wdm mass in keV
 
-	cosm%ifdm=1 ! turns fdm on and off
-    cosm%m_fdm=1.e-1 ! fdm mass in 1e-22 eV
+	cosm%ifdm=0 ! turns fdm on and off
+    cosm%m_fdm=1. ! fdm mass in 1e-22 eV
     
-	cosm%ibarrier=0 ! turn on and off barrier for FDM and WDM
+	cosm%ibarrier=1 ! turn on and off barrier for FDM and WDM
 	
 	IF(cosm%m_wdm.le.1.e-2) STOP 'error: WDM too light. Inaccuarate and will not fit CMB'
 	IF(cosm%m_fdm.le.1.e-2) STOP 'error: FDM too light. Inaccuarate and will not fit CMB'	
@@ -820,9 +820,24 @@ CONTAINS
     TYPE(cosmology) :: cosm, cos_lcdm
     TYPE(tables) :: lut
     REAL :: A, zinf, ainf, zf, g_lcdm, g_wcdm, w
+	REAL :: Mhm,khm,kjeq,mu,alp
+	REAL, PARAMETER :: pi=3.141592654
     INTEGER :: i
 
-    !Calculates the Bullock et al. (2001) mass-concentration relation
+	! Wfcode: the WDM and FDM half mode masses from the analytic transfer functions
+	! Foobar: not finished!
+	IF(cosm%iwdm==1) THEN
+		mu=1.12
+	    alp=0.052*(cosm%m_wdm**(-1.15))
+		khm=((0.5)**(-mu/5.)-1.)**(1/(2.*mu))/alp
+		Mhm=mass_r(pi/khm,cosm)
+	ELSE IF(cosm%ifdm==1) THEN
+		kjeq=9*cosm%m_fdm**(0.5)/cosm%h 
+		khm=0.5*cosm%m_fdm**(-1/18.)*kjeq
+		Mhm=mass_r(pi/khm,cosm)
+	END IF
+	
+	!Calculates the Bullock et al. (2001) mass-concentration relation
 
     A=As(cosm)
 
@@ -855,8 +870,15 @@ CONTAINS
        g_lcdm=grow_int(ainf,0.001,cos_lcdm)
 
        !Changed this to a power of 1.5, which produces more accurate results for extreme DE
-       lut%c(i)=lut%c(i)*((g_wcdm/g_lcdm)**1.5)
+       
+	   ! WFcode: added a new concentration-mass relationship, using the WDM fit from Schneider et al, 1112.0330
+	   ! Have assumed this is approprite for FDM, but note this has not been verified by simulation
 
+	   IF(cosm%iwdm==1. .OR. cosm%ifdm==1) THEN
+		lut%c(i)=lut%c(i)*((g_wcdm/g_lcdm)**1.5)*(1.+15.*(Mhm/lut%m(i)))**(-0.3)
+	   ELSE
+		lut%c(i)=lut%c(i)*((g_wcdm/g_lcdm)**1.5)
+	   END IF
        !END IF
 
     END DO
