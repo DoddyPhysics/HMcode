@@ -6,7 +6,7 @@
 ### <a name="original"></a>HMcode Original
 This code is produces the matter power spectrum using the halo-model approach described in Mead et al. (2015; http://arxiv.org/abs/1505.07833). Appendix B of that paper details the methods for doing the calculation. It also now includes some small updates from Mead et al. (2016).
 
-If you use this work, or this code, I would be very grateful if you were to cite the original paper, and the updated paper if you use results from that. The code itself can also be cited: http://ascl.net/1508.001
+If you use this work, or this code, I would be very grateful if you were to cite the original paper, and the updated paper if you use results from that. The code itself can also be cited: http://ascl.net/1508.001. If you use the WDM and FDM results, please cite Marsh (2016), see below.
 
 It should compile with any fortran compiler, and it doesn't need to be pointed to any libraries. I use 'ifort' and compile with '>ifort HMcode.f90' but it also works with gfortran.
 
@@ -50,17 +50,22 @@ I have left my routines to do this in as 'find_Tk' and 'find_pk', and these carr
 ### <a name="WarmFuzzy"></a>Warm and Fuzzy DM
 This addition is by David Marsh. Beta Version.
 
-Simple: modify just the power
-Added FDM and WDM transfer functions. Added option ifdm and iwdm to include them.
+This modification is described in detail in the paper, WarmAndFuzzy: the halo model beyond CDM. When using this code please cite both that paper and the original paper by Mead et al.
 
-Complicated: add a mass dependent barrier
-Added option ibarrier to do this. Added two functions, benson and marsh for the modified barriers. Benson is correct. Marsh one is a fudge for now Use barrier function to create new look up table nuST which is the modified barrier.  change mmin=1.e6, as otherwise you get NaNs way below the MF cut off
+WDM and FDM are implemented in three pieces:
 
-NOTE: The modified barrier is *only* passed into the ST mass function in the integrand. Otherwise you get an extra term appearing which makes the one halo term negative at large k, which is inconsistent (it is the logarithmic derivative of \delta, which is large and negative at low M). Including only in ST is consistent with the definitions in Marsh and Silk. Check on Benson. 
+* Transfer functions
+* Mass dependent barriers
+* Concentration-mass relationship
 
-This all matters because integrals are converted to \nu space by Mead, which makes certain assumptions. What we really want to do is do the integral in \sigma space. I think this is consistent with the principles of PS when the barrier depends on mass, and consistent with all Mead’s changes of variables. You use the variance at z=0 to define the mass, and ask how this compares to a moving barrier, even if the barrier has mass dependence. See also subhalo notes on measures.
+WDM and FDM are turned on and off with ifdm and iwdm. WDM mass is measured in keV. FDM mass is measured in 1e-22 eV. It is assumed all the DM is EITHER one of these species: you can't have both, or mixed models with CDM. The modified linear transfer functions are given analytically: if you want to use an input numerical power, but still use the other features, you will have to work a little harder to make things consistent.
 
+Mass dependent barriers are turned on and off with ibarrier. Added two functions, benson and marsh for the modified barriers. Use barrier function to create new look up table nuST which is the modified barrier.  change mmin=1.e6, as otherwise you get NaNs way below the MF cut off.
 
-More complicated: change halo density profiles and concentration: Haven’t started on this yet.
+NOTE: The modified barrier is *only* passed into the ST mass function in the integrand. Otherwise you get an extra term appearing which makes the one halo term negative at large k, which is inconsistent (it is the logarithmic derivative of \delta, which is large and negative at low M). Including only in ST is consistent with the definitions in Marsh and Silk (2014).
+
+This all matters because integrals are converted to \nu space by Mead, which makes certain assumptions. What we really want to do is do the integral in \sigma space. This is consistent with the principles of Press-Schechter when the barrier depends on mass, and consistent with all Mead’s changes of variables. You use the variance at z=0 to define the mass, and ask how this compares to a moving barrier, even if the barrier has mass dependence. 
+
+Modified concentration mass relationship follows Schneider et al (2012) and treats WDM and FDM the same, using the half-mode mass. This is turned on and off with iconc, and requires additional lookup tables for the CDM c(M) relationship, computed from the CDM linear power.
 
 
