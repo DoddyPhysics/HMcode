@@ -2,7 +2,7 @@ MODULE cosdef
 
   TYPE cosmology
      !Contains only things that do not need to be recalculated with each new z
-     REAL :: om_m, om_b, om_v, om_c, h, n, sig8, w, wa, m_wdm, m_fdm
+     REAL :: om_m, om_b, om_v, om_c, h, n, sig8, w, wa, m_wdm, m_fdm, gx
      REAL :: A
      INTEGER :: iwdm,ifdm,ibarrier,iconc
      REAL, ALLOCATABLE :: r_sigma(:), sigma1d(:)
@@ -30,7 +30,7 @@ PROGRAM HMcode
   REAL :: p1h, p2h, pfull, plin
   REAL, ALLOCATABLE :: k(:), ztab(:), ptab(:,:)
   INTEGER :: i, j, nk, nz
-  INTEGER :: ihm, imead
+  INTEGER :: ihm, imead,iwdm,ifdm,iconc,ibarrier
   REAL :: kmin, kmax, zmin, zmax
   REAL, PARAMETER :: pi=3.141592654
   TYPE(cosmology) :: cosi
@@ -52,12 +52,24 @@ PROGRAM HMcode
   !1 - Do the accurate calculation detailed in 1505.07833 with updates in Mead et al. (2016)
   imead=0
 
+  ! ifdm, iwdm, ibarrier, iconc: FDM, WDM, modified barrier, modified concentration-mass
+  ! 0 - don't include these effecs
+  ! 1 - do
+  iwdm=1
+  ifdm=0
+  ibarrier=1
+  iconc=0
+  
+  output='power.dat'
+
   WRITE(*,*)
-  WRITE(*,*) 'Welcome to HMcode'
+  WRITE(*,*) 'Welcome to WarmAndFuzzy'
   WRITE(*,*) '================='
   WRITE(*,*)
   IF(imead==0) WRITE(*,*) 'Doing standard calculation'
-  IF(imead==1) WRITE(*,*) 'Doing accurate calculation'
+  IF(imead==1) WRITE(*,*) 'Doing accurate calculation for CDM'
+  IF(iwdm==1) WRITE(*,*) 'Including effects of Warm DM'
+  IF(ifdm==1) WRITE(*,*) 'Including effects of Fuzzy DM'
   WRITE(*,*)
 
   !Set number of k points and k range (log spaced)
@@ -128,7 +140,6 @@ PROGRAM HMcode
   END DO
   WRITE(*,*)
 
-  output='mw1_conc.dat'
   WRITE(*,fmt='(A19,A10)') 'Writing output to:', TRIM(output)
   WRITE(*,*)
   WRITE(*,*) 'The top row of the file contains the redshifts (the first entry is hashes - #####)'
@@ -446,18 +457,15 @@ CONTAINS
     cosm%n=0.9436
     cosm%wa=0.
 
-    cosm%iwdm=1 ! turns wdm on and off
-    cosm%m_wdm=1. ! wdm mass in keV
+! WFcode: give the mass of WDM or FDM
 
-	cosm%ifdm=0 ! turns fdm on and off
+    cosm%m_wdm=5. ! wdm mass in keV
+	cosm%gx=1.5 ! wdm degrees of freedom, =1.5 for spin 1/2 fermion
     cosm%m_fdm=1. ! fdm mass in 1e-22 eV
-    
-	cosm%ibarrier=1 ! turn on and off barrier for FDM and WDM
-	cosm%iconc=1 ! turn on and off the c(M) model for FDM and WDM
-	
-	IF(cosm%m_wdm.le.1.e-2) STOP 'error: WDM too light. Inaccuarate and will not fit CMB'
-	IF(cosm%m_fdm.le.1.e-2) STOP 'error: FDM too light. Inaccuarate and will not fit CMB'	
-	IF(cosm%ifdm==1 .AND. cosm%iwdm==1) STOP 'error: cannot have WDM and FDM on at same time!'
+
+    	
+	IF(cosm%m_wdm.le.1.e-2 .OR. cosm%m_fdm .le. 1.e-2) STOP 'error: DM too light. Inaccuarate and will not fit CMB'
+	IF(ifdm==1 .AND. iwdm==1) STOP 'error: cannot have WDM and FDM on at same time!'
 
   END SUBROUTINE assign_cosmology
 
@@ -492,7 +500,7 @@ CONTAINS
     CALL fill_sigtab(cosm)
 
 	! WFcode: fill the sigmaCDM table if needed
-	IF(cosm%iconc==1)THEN
+	IF(iconc==1)THEN
 		CALL fill_sigtabCDM(cosm)
 	END IF
 
@@ -617,6 +625,8 @@ CONTAINS
     INTEGER :: i, imin, imax, n
     REAL :: rin, dr, Dv, dc, f, m, mmin, mmax, nu, r, sig
 	REAL :: calG, nuST ! WFcode: calG is barrier fit for WDM/FDM
+	REAL :: mw, omh2, mj,ma
+	REAL, PARAMETER :: a1=3.4 ! WFcode: FDM Jeans mass fit parameter   
     !REAL, ALLOCATABLE :: rg_up(:), rg_dn(:), nu_up(:), nu_dn(:), mg_up(:), mg_dn(:)
     TYPE(cosmology) :: cosm
     TYPE(tables) :: lut
@@ -647,8 +657,18 @@ CONTAINS
     CALL allocate_lut(lut)
 
     !Mass range for halo model calculation
-	IF (cosm%ibarrier==1) THEN
-		mmin=1.e6 ! WFcode: fudge to 1.e6 if ibarrier==1 
+	! WFcode: if using modified barrier, set mmin=1.e-1 of Jeans mass
+	IF (ibarrier==1) THEN
+		IF(cosm%m_wdm==1) THEN
+			mw=cosm%m_wdm
+			omh2=cosm%om_m*cosm%h**2.
+			mj=cosm%h*(4.02e8*(omh2/0.15)**2.*(cosm%gx/1.5)**(-1.)*mw**(-4.))			
+		ELSE IF(cosm%m_fdm==1) THEN
+			ma=cosm%m_fdm
+			omh2=cosm%om_m*cosm%h**2.
+			mj=a1*1.e8*ma**(-1.5)*(omh2/0.14)**0.25
+		END IF
+		mmin=0.5*mj
     ELSE
 		mmin=1.e2
 	END IF
@@ -667,10 +687,10 @@ CONTAINS
 ! WFcode: this is where we change the barrier! Set nu=(dc/sig)*calG
 ! For discussion of why I use two nu's, see documentation.
 
-       IF (cosm%ibarrier==1) THEN
-	   		IF(cosm%iwdm==1) THEN 
+       IF (ibarrier==1) THEN
+	   		IF(iwdm==1) THEN 
 		   		calG=benson(m,cosm)
-	   		ELSE IF(cosm%ifdm==1) THEN
+	   		ELSE IF(ifdm==1) THEN
 	       		calG=marsh(m,cosm) 
 	   		ELSE
 	       		calG=1.
@@ -703,7 +723,7 @@ CONTAINS
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! WFcode: the sigf table is only used by Bullock, and so we just change this for iconc
 
-	   IF(cosm%iconc==1) THEN
+	   IF(iconc==1) THEN
        	lut%sigf(i)=sigma_cbCDM(lut%rr(i)*f,z,cosm) 
 	   ELSE
 		lut%sigf(i)=sigma_cb(lut%rr(i)*f,z,cosm)
@@ -778,12 +798,11 @@ CONTAINS
     REAL :: benson
     REAL, INTENT(IN) :: m
     TYPE(cosmology), INTENT(IN) :: cosm
-    REAL, PARAMETER :: gx=1.5
     REAL :: mw,omh2,benx,benh,mjw
   
     mw=cosm%m_wdm
 	omh2=cosm%om_m*cosm%h**2.
-	mjw=cosm%h*(4.02e8*(omh2/0.15)**2.*(gx/1.5)**(-1.)*mw**(-4.))
+	mjw=cosm%h*(4.02e8*(omh2/0.15)**2.*(cosm%gx/1.5)**(-1.)*mw**(-4.))
     benx=log(m/mjw)
     benh=1./(1+exp((benx+2.4)/0.1))
     benson=benh*(0.04/exp(2.3*benx))+(1-benh)*exp(0.31687/exp(0.809*benx))
@@ -847,12 +866,12 @@ CONTAINS
 
 	! Wfcode: the WDM and FDM half mode masses from the analytic transfer functions
 
-	IF(cosm%iwdm==1) THEN
+	IF(iwdm==1) THEN
 		mu=1.12
 	    alp=0.052*(cosm%m_wdm**(-1.15))
 		khm=((0.5)**(-mu/5.)-1.)**(1/(2.*mu))/alp
 		Mhm=mass_r(pi/khm,cosm)
-	ELSE IF(cosm%ifdm==1) THEN
+	ELSE IF(ifdm==1) THEN
 		kjeq=9*cosm%m_fdm**(0.5)/cosm%h 
 		khm=0.5*cosm%m_fdm**(-1/18.)*kjeq
 		Mhm=mass_r(pi/khm,cosm)
@@ -897,8 +916,8 @@ CONTAINS
 	   ! WFcode: added a new concentration-mass relationship, using the WDM fit from Schneider et al, 1112.0330
 	   ! Have assumed this is approprite for FDM, but note this has not been verified by simulation
 	   
-	   IF(cosm%iwdm==1. .OR. cosm%ifdm==1) THEN
-		IF(cosm%iconc==1) THEN
+	   IF(iwdm==1. .OR. ifdm==1) THEN
+		IF(iconc==1) THEN
 			lut%c(i)=lut%c(i)*((g_wcdm/g_lcdm)**1.5)*(1.+15.*(Mhm/lut%m(i)))**(-0.3) ! Schneider fit, using CDM variance
 		ELSE
 			lut%c(i)=lut%c(i)*((g_wcdm/g_lcdm)**1.5) ! The Bullock c(M) using WDM/FDM variance
@@ -1155,14 +1174,14 @@ CONTAINS
        p_lin=(cosm%A**2.)*(grow(z,cosm)**2.)*(Tk(k,cosm)**2.)*(k**(cosm%n+3.))
     END IF
 
-    IF(cosm%iwdm==1) THEN
+    IF(iwdm==1) THEN
        ! WDM transfer function, Bode et al (2001)
        mu=1.12
        alp=0.052*(cosm%m_wdm**(-1.15))    
        p_lin=p_lin*((1.+(alp*k)**(2.*mu))**(-10./mu))
     END IF
 
-	IF(cosm%ifdm==1) THEN
+	IF(ifdm==1) THEN
 	   ! FDM transfer function, Hu et al (2000)
        kjeq=9*cosm%m_fdm**(0.5)/cosm%h ! Units used in this code are h Mpc^-1
 	   xj=1.61*cosm%m_fdm**(1./18.)*k/kjeq
@@ -1411,7 +1430,7 @@ SUBROUTINE fill_sigtabCDM(cosm)
     REAL, INTENT(IN) :: r, z
     TYPE(cosmology), INTENT(IN) :: cosm
 
-    IF(r>=1.e-2 .OR. cosm%iwdm==1 .OR. cosm%ifdm==1) THEN
+    IF(r>=1.e-2 .OR. iwdm==1 .OR. ifdm==1) THEN
 
        sigma=sigint0(r,z,cosm)
 
