@@ -58,9 +58,9 @@ PROGRAM HMcode
   iwdm=1
   ifdm=0
   ibarrier=1
-  iconc=0
+  iconc=1
   
-  output='power.dat'
+  output='mw1_conc_barrier.dat'
 
   WRITE(*,*)
   WRITE(*,*) 'Welcome to WarmAndFuzzy'
@@ -459,7 +459,7 @@ CONTAINS
 
 ! WFcode: give the mass of WDM or FDM
 
-    cosm%m_wdm=5. ! wdm mass in keV
+    cosm%m_wdm=1. ! wdm mass in keV
 	cosm%gx=1.5 ! wdm degrees of freedom, =1.5 for spin 1/2 fermion
     cosm%m_fdm=1. ! fdm mass in 1e-22 eV
 
