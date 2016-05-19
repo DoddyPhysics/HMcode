@@ -62,9 +62,7 @@ WDM and FDM are turned on and off with ifdm and iwdm. WDM mass is measured in ke
 
 Mass dependent barriers are turned on and off with ibarrier. Added two functions, benson and marsh for the modified barriers. Use barrier function to create new look up table nuST which is the modified barrier.  change mmin=1.e6, as otherwise you get NaNs way below the MF cut off.
 
-NOTE: The modified barrier is *only* passed into the ST mass function in the integrand. Otherwise you get an extra term appearing which makes the one halo term negative at large k, which is inconsistent (it is the logarithmic derivative of \delta, which is large and negative at low M). Including only in ST is consistent with the definitions in Marsh and Silk (2014).
-
-This all matters because integrals are converted to \nu space by Mead, which makes certain assumptions. What we really want to do is do the integral in \sigma space. This is consistent with the principles of Press-Schechter when the barrier depends on mass, and consistent with all Mead’s changes of variables. You use the variance at z=0 to define the mass, and ask how this compares to a moving barrier, even if the barrier has mass dependence. 
+NOTE: compared to HMcode, WFcode does the one halo integral as an integral over \sigma rather than \nu. This is necessary for consistency when the barrier is mass dependent.
 
 Modified concentration mass relationship follows Schneider et al (2012) and treats WDM and FDM the same, using the half-mode mass. This is turned on and off with iconc, and requires additional lookup tables for the CDM c(M) relationship, computed from the CDM linear power.
 
