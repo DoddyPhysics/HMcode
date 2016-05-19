@@ -15,8 +15,7 @@ MODULE cosdef
 
   TYPE tables
      !Stuff that needs to be recalculated for each new z
-	 ! WFcode: added nuST to LUT. This is the modified barrier that is only passed to gnu() ST mass function
-     REAL, ALLOCATABLE :: c(:), rv(:), nu(:), sig(:), zc(:), m(:), rr(:), sigf(:), nuST(:)
+     REAL, ALLOCATABLE :: c(:), rv(:), nu(:), sig(:), zc(:), m(:), rr(:), sigf(:)
      REAL :: sigv, sigv100, c3, knl, rnl, neff, sig8z
      INTEGER :: n
   END TYPE tables
@@ -55,12 +54,12 @@ PROGRAM HMcode
   ! ifdm, iwdm, ibarrier, iconc: FDM, WDM, modified barrier, modified concentration-mass
   ! 0 - don't include these effecs
   ! 1 - do
-  iwdm=1
-  ifdm=0
+  iwdm=0
+  ifdm=1
   ibarrier=1
   iconc=1
   
-  output='mw1_conc_barrier.dat'
+  output='mf1_conc_barrier.dat'
 
   WRITE(*,*)
   WRITE(*,*) 'Welcome to WarmAndFuzzy'
@@ -590,9 +589,6 @@ CONTAINS
 
     ALLOCATE(lut%zc(n),lut%m(n),lut%c(n),lut%rv(n))
     ALLOCATE(lut%nu(n),lut%rr(n),lut%sigf(n),lut%sig(n))
-	! WFcode: added a new "nu" parameter that only appears in the HMF
-	! this is consistent with the one-halo integrals used.
-	ALLOCATE(lut%nuST(n))
 
     lut%zc=0.
     lut%m=0.
@@ -602,7 +598,6 @@ CONTAINS
     lut%rr=0.
     lut%sigf=0.
     lut%sig=0.
-	lut%nuST=0.
 	
 
   END SUBROUTINE allocate_LUT
@@ -613,7 +608,7 @@ CONTAINS
     TYPE(tables) :: lut
 
     !Deallocates look-up tables
-    DEALLOCATE(lut%zc,lut%m,lut%c,lut%rv,lut%nu,lut%rr,lut%sigf,lut%sig,lut%nuST)
+    DEALLOCATE(lut%zc,lut%m,lut%c,lut%rv,lut%nu,lut%rr,lut%sigf,lut%sig)
 
   END SUBROUTINE deallocate_LUT
 
@@ -624,7 +619,7 @@ CONTAINS
     REAL, INTENT(IN) :: z
     INTEGER :: i, imin, imax, n
     REAL :: rin, dr, Dv, dc, f, m, mmin, mmax, nu, r, sig
-	REAL :: calG, nuST ! WFcode: calG is barrier fit for WDM/FDM
+	REAL :: calG ! WFcode: calG is barrier fit for WDM/FDM
 	REAL :: mw, omh2, mj,ma
 	REAL, PARAMETER :: a1=3.4 ! WFcode: FDM Jeans mass fit parameter   
     !REAL, ALLOCATABLE :: rg_up(:), rg_dn(:), nu_up(:), nu_dn(:), mg_up(:), mg_dn(:)
@@ -668,7 +663,7 @@ CONTAINS
 			omh2=cosm%om_m*cosm%h**2.
 			mj=a1*1.e8*ma**(-1.5)*(omh2/0.14)**0.25
 		END IF
-		mmin=0.5*mj
+		mmin=1.e-1*mj
     ELSE
 		mmin=1.e2
 	END IF
@@ -699,18 +694,15 @@ CONTAINS
 	        calG=1.
    	   END IF
 
-       nu=(dc/sig) ! WFcode: This nu is used to map from nu to mass, and actually do the integral
+       nu=(dc/sig)*calG ! WFcode: modify the barrier
 
-	   nuST=(dc/sig)*calG ! WFcode: modified nu is only passed to ST mass function in the integral, nowhere else
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 		
        lut%m(i)=m
        lut%rr(i)=r
        lut%sig(i)=sig
        lut%nu(i)=nu
-	   lut%nuST(i)=nuST
 		
-
     END DO
 
     IF(ihm==1) WRITE(*,*) 'HALOMOD: m, r, nu, sig tables filled'
@@ -1271,14 +1263,15 @@ FUNCTION p_cdm(k,z,cosm)
     et=eta(z,cosm)
 
     !Calculates the value of the integrand at all nu values!
+	! WFcode: changed to integral d[sigma]. verified relative effect in CDM <1.e-3 in power
     DO i=1,lut%n
-       g=gnu(lut%nuST(i)) ! WFcode: modified to pass a barrier into the Sheth-Tormen part of the integrand
+       g=gnuDSIG(lut%nu(i),lut%sig(i)) 
        wk=win(k*(lut%nu(i)**et),lut%rv(i),lut%c(i))
        integrand(i)=(lut%rv(i)**3.)*g*(wk**2.)
     END DO
     
     !Carries out the integration
-    sum=inttab(lut%nu,REAL(integrand),1)
+    sum=inttab(lut%sig,REAL(integrand),1)
     
     DEALLOCATE(integrand)
 
@@ -2222,6 +2215,19 @@ END FUNCTION sigint2CDM
     gnu=gst(nu)
 
   END FUNCTION gnu
+
+! WFcode: argument for one halo integral d[sigma] with Jacobian
+
+  FUNCTION gnuDSIG(nu,sig)
+
+    IMPLICIT NONE
+    REAL :: gnuDSIG, nu,sig
+
+    !Mass function
+
+    gnuDSIG=gst(nu)*(-nu/sig)
+
+  END FUNCTION gnuDSIG
 
   FUNCTION gst(nu)
 
