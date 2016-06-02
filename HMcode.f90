@@ -35,7 +35,7 @@ PROGRAM HMcode
 
   !HMcode developed by Alexander Mead
   !If you use this in your work please cite the original paper: http://arxiv.org/abs/1505.07833
-  !and consider citing the source code at ASCL: http://ascl.net/1508.001
+  !and consider citing the source code at ASCL: http://ascl.net/1508.001 
 
   !ihm
   !0 - Non-verbose

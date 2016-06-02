@@ -41,6 +41,9 @@ PROGRAM HMcode
   !If you use this in your work please cite the original paper: http://arxiv.org/abs/1505.07833
   !and consider citing the source code at ASCL: http://ascl.net/1508.001
 
+  !WFcode developed by David J. E. Marsh adds Warm and Fuzzy dark matter
+  !If you use this in your work please cite: http://arxiv.org/abs/1605.05973
+
   !ihm
   !0 - Non-verbose
   !1 - Verbose
