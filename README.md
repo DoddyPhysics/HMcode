@@ -1,6 +1,30 @@
-# <a name="top"></a>HMcode
-*[HMcode Original](#original)
+# <a name="top"></a>WarmAndFuzzy
 *[Warm and Fuzzy DM](#WarmFuzzy)
+*[HMcode Original](#original)
+
+
+-------------------------------
+### <a name="WarmFuzzy"></a>Warm and Fuzzy DM
+This addition is by David J.E. Marsh. 
+
+This modification is described in detail in the paper, WarmAndFuzzy: the halo model beyond CDM. When using this code please cite both that paper and the original paper by Mead et al.
+
+WDM and FDM are implemented in three pieces:
+
+* Transfer functions
+* Mass dependent barriers
+* Concentration-mass relationship
+
+WDM and FDM are turned on and off with ifdm and iwdm. WDM mass is measured in keV. FDM mass is measured in 1e-22 eV. It is assumed all the DM is EITHER one of these species: you can't have both, or mixed models with CDM. The modified linear transfer functions are given analytically: if you want to use an input numerical power, but still use the other features, you will have to work a little harder to make things consistent.
+
+Mass dependent barriers are turned on and off with ibarrier. Added two functions, benson and marsh for the modified barriers. Use barrier function to create new look up table nuST which is the modified barrier.  change mmin=1.e6, as otherwise you get NaNs way below the MF cut off.
+
+NOTE: compared to HMcode, WFcode does the one halo integral as an integral over \sigma rather than \nu. This is necessary for consistency when the barrier is mass dependent.
+
+Modified concentration mass relationship follows Schneider et al (2012) and treats WDM and FDM the same, using the half-mode mass. This is turned on and off with iconc, and requires additional lookup tables for the CDM c(M) relationship, computed from the CDM linear power.
+
+
+
 
 --------------------------------
 ### <a name="original"></a>HMcode Original
@@ -45,27 +69,4 @@ Given the differences between CAMB and Eisenstein + Hu (1998) one might wish to 
 The halo-model calculation does integrals that are technically defined over the entire k range from 0 to inf. In practice contributions from very small and large scales are suppressed but the integration routines still need to know about the power at these scales sometimes, otherwise they may go bonkers. Obviously this is a problem given that one usually has a tabulated linear power spectrum defined on some finite range in k. The way I dealt with this was to read in the linear spectrum but then extrapolate if the code called 'p_lin' for k values below the minimum, or above the maximum, using physically motivated extrapolations. For example you know that the linear power spectrum is a power-law down to k->0 (\Delta^2 \propto k^{3+n}) and the high-k part can be approximated as \Delta^2 \propto k^{n-1}log(k)^2. 
 
 I have left my routines to do this in as 'find_Tk' and 'find_pk', and these carry out the correct extrapolation beyond the boundaries of either a P(k) table or T(k) table. These can be switched on using the 'itk' variable. Originally itk=3, which means the code uses Eisenstein + Hu (1998). If itk=4 is set then the code will look for an input table of k/h vs. T(k) and if itk=5 is set it will look for k/h vs. P(k). These input files need to be specified at run time (e.g. ./a.out input_tk.dat).
-
--------------------------------
-### <a name="WarmFuzzy"></a>Warm and Fuzzy DM
-This addition is by David Marsh. Beta Version.
-
-This modification is described in detail in the paper, WarmAndFuzzy: the halo model beyond CDM. When using this code please cite both that paper and the original paper by Mead et al.
-
-WDM and FDM are implemented in three pieces:
-
-* Transfer functions
-* Mass dependent barriers
-* Concentration-mass relationship
-
-WDM and FDM are turned on and off with ifdm and iwdm. WDM mass is measured in keV. FDM mass is measured in 1e-22 eV. It is assumed all the DM is EITHER one of these species: you can't have both, or mixed models with CDM. The modified linear transfer functions are given analytically: if you want to use an input numerical power, but still use the other features, you will have to work a little harder to make things consistent.
-
-Mass dependent barriers are turned on and off with ibarrier. Added two functions, benson and marsh for the modified barriers. Use barrier function to create new look up table nuST which is the modified barrier.  change mmin=1.e6, as otherwise you get NaNs way below the MF cut off.
-
-NOTE: The modified barrier is *only* passed into the ST mass function in the integrand. Otherwise you get an extra term appearing which makes the one halo term negative at large k, which is inconsistent (it is the logarithmic derivative of \delta, which is large and negative at low M). Including only in ST is consistent with the definitions in Marsh and Silk (2014).
-
-This all matters because integrals are converted to \nu space by Mead, which makes certain assumptions. What we really want to do is do the integral in \sigma space. This is consistent with the principles of Press-Schechter when the barrier depends on mass, and consistent with all Mead’s changes of variables. You use the variance at z=0 to define the mass, and ask how this compares to a moving barrier, even if the barrier has mass dependence. 
-
-Modified concentration mass relationship follows Schneider et al (2012) and treats WDM and FDM the same, using the half-mode mass. This is turned on and off with iconc, and requires additional lookup tables for the CDM c(M) relationship, computed from the CDM linear power.
-
 
