@@ -60,7 +60,7 @@ PROGRAM HMcode
   iwdm=0
   ifdm=1
   ibarrier=1
-  iconc=0
+  iconc=1
   
   output='m1-23.dat'
 
@@ -665,7 +665,6 @@ CONTAINS
 			ma=cosm%m_fdm
 			omh2=cosm%om_m*cosm%h**2.
 			mj=a1*1.e8*ma**(-1.5)*(omh2/0.14)**0.25
-			write(*,*)mj, 'jeans'
 		END IF
 		mmin=1.e-1*mj
     ELSE
