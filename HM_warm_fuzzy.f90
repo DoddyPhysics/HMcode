@@ -60,9 +60,9 @@ PROGRAM HMcode
   iwdm=0
   ifdm=1
   ibarrier=1
-  iconc=1
+  iconc=0
   
-  output='mf1_conc_barrier.dat'
+  output='m1-23.dat'
 
   WRITE(*,*)
   WRITE(*,*) 'Welcome to WarmAndFuzzy'
@@ -369,7 +369,7 @@ CONTAINS
 	!!!!!!!!!!!!!!!!!
 	!ELSE IF(cosm%sigma1d(1)*grow(z,cosm).le.1) THEN
 	!   p2h=p_2h(k,z,plin,lut,cosm)
-	   !write(*,*)'power is linear at z=',z
+	!   write(*,*)'power is linear at z=',z
 	!   p1h=0
 	!!!!!!!!!!!!!!!
 	
@@ -463,7 +463,7 @@ CONTAINS
 
     cosm%m_wdm=1. ! wdm mass in keV
 	cosm%gx=1.5 ! wdm degrees of freedom, =1.5 for spin 1/2 fermion
-    cosm%m_fdm=1. ! fdm mass in 1e-22 eV
+    cosm%m_fdm=0.1 ! fdm mass in 1e-22 eV
 
     	
 	IF(cosm%m_wdm.le.1.e-2 .OR. cosm%m_fdm .le. 1.e-2) STOP 'error: DM too light. Inaccuarate and will not fit CMB'
@@ -657,14 +657,15 @@ CONTAINS
     !Mass range for halo model calculation
 	! WFcode: if using modified barrier, set mmin=1.e-1 of Jeans mass
 	IF (ibarrier==1) THEN
-		IF(cosm%m_wdm==1) THEN
+		IF(iwdm==1) THEN
 			mw=cosm%m_wdm
 			omh2=cosm%om_m*cosm%h**2.
 			mj=cosm%h*(4.02e8*(omh2/0.15)**2.*(cosm%gx/1.5)**(-1.)*mw**(-4.))			
-		ELSE IF(cosm%m_fdm==1) THEN
+		ELSE IF(ifdm==1) THEN
 			ma=cosm%m_fdm
 			omh2=cosm%om_m*cosm%h**2.
 			mj=a1*1.e8*ma**(-1.5)*(omh2/0.14)**0.25
+			write(*,*)mj, 'jeans'
 		END IF
 		mmin=1.e-1*mj
     ELSE
