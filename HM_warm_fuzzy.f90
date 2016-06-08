@@ -49,20 +49,31 @@ PROGRAM HMcode
   !1 - Verbose
   ihm=1
 
+  
+  open(42,file="inputs.f90",status="unknown")
+  read(42,*) ! skip comment line
+  read(42,*) ! skip comment line
+  read(42,*) output ! output file
+  !Set number of k points and k range (log spaced)
+  read(42,*) nk
+  read(42,*) kmin
+  read(42,*) kmax
+  !Set the number of redshifts and range (linearly spaced)
+  read(42,*) nz
+  read(42,*) zmin
+  read(42,*) zmax
   !imead
   !0 - Do the standard halo model calculation (Dv=200, dc=1.686, Sheth & Tormen (1999) mass function, Bullock (2001) c(M)'
   !1 - Do the accurate calculation detailed in 1505.07833 with updates in Mead et al. (2016)
-  imead=0
-
-  ! ifdm, iwdm, ibarrier, iconc: FDM, WDM, modified barrier, modified concentration-mass
+  read(42,*) imead
+ ! ifdm, iwdm, ibarrier, iconc: FDM, WDM, modified barrier, modified concentration-mass
   ! 0 - don't include these effecs
   ! 1 - do
-  iwdm=0
-  ifdm=1
-  ibarrier=1
-  iconc=1
-  
-  output='m1-23.dat'
+  read(42,*) iwdm
+  read(42,*) ifdm
+  read(42,*) ibarrier
+  read(42,*) iconc
+  close(42)
 
   WRITE(*,*)
   WRITE(*,*) 'Welcome to WarmAndFuzzy'
@@ -75,9 +86,6 @@ PROGRAM HMcode
   WRITE(*,*)
 
   !Set number of k points and k range (log spaced)
-  nk=2000
-  kmin=0.001
-  kmax=1.e4
   CALL fill_table(kmin,kmax,k,nk,1)
 
 
@@ -87,10 +95,6 @@ PROGRAM HMcode
   WRITE(*,*) 'number of k:', nk
   WRITE(*,*)
 
-  !Set the number of redshifts and range (linearly spaced)
-  nz=15
-  zmin=0.
-  zmax=14.
   CALL fill_table(zmin,zmax,ztab,nz,0)
 
   WRITE(*,*) 'z min:', zmin
@@ -449,21 +453,28 @@ CONTAINS
     TYPE(cosmology) :: cosm
     LOGICAL :: lexist
 
-    cosm%om_m=0.312945
+! WFcode: added a .f90 ini file for ease of running
+
+	open(41,file="params.f90",status="unknown")
+	read(41,*) ! skip comment line
+	read(41,*) ! skip comment line
+	read(41,*)cosm%om_m
+	read(41,*)cosm%om_b
+	read(41,*)cosm%h
+	read(41,*)cosm%w
+	read(41,*)cosm%sig8
+	read(41,*)cosm%n
+	read(41,*)cosm%wa
+	read(41,*) ! skip comment line
+	read(41,*)cosm%m_wdm ! wdm mass in keV
+	read(41,*)cosm%gx ! wdm degrees of freedom, =1.5 for spin 1/2 fermion
+	read(41,*) ! skip comment line
+	read(41,*)cosm%m_fdm ! fdm mass in 1e-22 eV
+    close(41)
+
+
     cosm%om_v=1.-cosm%om_m
-    cosm%om_b=0.04894300387714018
     cosm%om_c=cosm%om_m-cosm%om_b
-    cosm%h=0.6715
-    cosm%w=-1.
-    cosm%sig8=0.851707637    
-    cosm%n=0.9436
-    cosm%wa=0.
-
-! WFcode: give the mass of WDM or FDM
-
-    cosm%m_wdm=1. ! wdm mass in keV
-	cosm%gx=1.5 ! wdm degrees of freedom, =1.5 for spin 1/2 fermion
-    cosm%m_fdm=0.1 ! fdm mass in 1e-22 eV
 
     	
 	IF(cosm%m_wdm.le.1.e-2 .OR. cosm%m_fdm .le. 1.e-2) STOP 'error: DM too light. Inaccuarate and will not fit CMB'
