@@ -8,9 +8,9 @@
 	0.968		! n_s
 	0.			! wa
 !! WDM params only used if iwdm = 1 in inputs
-	1.			! wdm mass in keV
+	3.3			! wdm mass in keV
 	1.5			! wdm degrees of freedom, =1.5 for spin 1/2 fermion
 !! FDM params only used if ifdm = 1 in inputs
-	1.			! fdm mass in 1e-22 eV
+	15.			! fdm mass in 1e-22 eV
 
 	
