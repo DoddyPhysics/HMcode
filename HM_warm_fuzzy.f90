@@ -29,7 +29,7 @@ PROGRAM HMcode
   REAL :: p1h, p2h, pfull, plin
   REAL, ALLOCATABLE :: k(:), ztab(:), ptab(:,:)
   INTEGER :: i, j, nk, nz
-  INTEGER :: ihm, imead,iwdm,ifdm,iconc,ibarrier
+  INTEGER :: ihm, imead,iwdm,ifdm,iconc,ibarrier,iprofile
   REAL :: kmin, kmax, zmin, zmax
   REAL, PARAMETER :: pi=3.141592654
   TYPE(cosmology) :: cosi
@@ -66,13 +66,14 @@ PROGRAM HMcode
   !0 - Do the standard halo model calculation (Dv=200, dc=1.686, Sheth & Tormen (1999) mass function, Bullock (2001) c(M)'
   !1 - Do the accurate calculation detailed in 1505.07833 with updates in Mead et al. (2016)
   read(42,*) imead
- ! ifdm, iwdm, ibarrier, iconc: FDM, WDM, modified barrier, modified concentration-mass
+ ! ifdm, iwdm, ibarrier, iconc, iprofile: FDM, WDM, barrier, concentration-mass, halo profile
   ! 0 - don't include these effecs
   ! 1 - do
   read(42,*) iwdm
   read(42,*) ifdm
   read(42,*) ibarrier
   read(42,*) iconc
+  read(42,*) iprofile
   close(42)
 
   WRITE(*,*)
@@ -526,6 +527,13 @@ CONTAINS
     REAL :: om_m_min, om_m_max, om_b_min, om_b_max, n_min, n_max
     REAL :: w_min, w_max, h_min, h_max, sig8_min, sig8_max, wa_min, wa_max
 
+
+! WFcode: note this is not set up for non-CDM
+	if(iwdm==1 .or. ifdm==1) then
+		write(*,*)'You called a random cosmology: not supported for WDM and FDM'
+		stop
+	end if
+
     !Needs to be set to normalise P_lin
     cosm%A=1.
 
@@ -694,7 +702,8 @@ CONTAINS
 	
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! WFcode: this is where we change the barrier! Set nu=(dc/sig)*calG
-! For discussion of why I use two nu's, see documentation.
+! Note this is a naive application, but qualitatively correct.
+! See http://arxiv.org/abs/1608.02575 for excursion set barrier solution
 
        IF (ibarrier==1) THEN
 	   		IF(iwdm==1) THEN 
@@ -708,7 +717,7 @@ CONTAINS
 	        calG=1.
    	   END IF
 
-       nu=(dc/sig)*calG ! WFcode: modify the barrier
+       nu=(dc/sig)*calG 
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 		
@@ -2172,8 +2181,14 @@ END FUNCTION sigint2CDM
     IMPLICIT NONE
     REAL :: win, k, rv, c
 
-    !Calls the analytic Fourier Transform of the NFW profile
-    win=winnfw(k,rv,c)
+    ! WFcode: modify the halo density profile if iprofile==1
+	if(iprofile==0)then
+		!Calls the analytic Fourier Transform of the NFW profile
+    	win=winnfw(k,rv,c)
+	else
+		! WFcode: placeholder do not modify at all, while we set up the machinery
+		win=winnfw(k,rv,c)
+	end if
 
     !Correct for the case of disasters (a bit sloppy, not sure if this is ever used)
     IF(win>1.) win=1.
