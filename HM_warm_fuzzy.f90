@@ -528,7 +528,7 @@ CONTAINS
     REAL :: w_min, w_max, h_min, h_max, sig8_min, sig8_max, wa_min, wa_max
 
 
-! WFcode: note this is not set up for non-CDM
+! WFcode: note that random cosmology is not set up for non-CDM
 	if(iwdm==1 .or. ifdm==1) then
 		write(*,*)'You called a random cosmology: not supported for WDM and FDM'
 		stop
