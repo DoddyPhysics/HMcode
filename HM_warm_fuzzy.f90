@@ -50,7 +50,7 @@ PROGRAM HMcode
   ihm=1
 
   
-  open(42,file="inputs.f90",status="unknown")
+  open(42,file="inputs_simcheck.f90",status="unknown")
   read(42,*) ! skip comment line
   read(42,*) ! skip comment line
   read(42,*) output ! output file
@@ -456,7 +456,7 @@ CONTAINS
 
 ! WFcode: added a .f90 ini file for ease of running
 
-	open(41,file="params.f90",status="unknown")
+	open(41,file="params_simcheck.f90",status="unknown")
 	read(41,*) ! skip comment line
 	read(41,*) ! skip comment line
 	read(41,*)cosm%om_m
@@ -480,6 +480,8 @@ CONTAINS
     	
 	IF(cosm%m_wdm.le.1.e-2 .OR. cosm%m_fdm .le. 1.e-2) STOP 'error: DM too light. Inaccuarate and will not fit CMB'
 	IF(ifdm==1 .AND. iwdm==1) STOP 'error: cannot have WDM and FDM on at same time!'
+	IF(iwdm==0. .AND. iwdm==0 .AND. iconc==0) STOP 'error: do not turn on conc effects without WDM/FDM'
+	IF(iwdm==0. .AND. iwdm==0 .AND. ibarrier==0) STOP 'error: do not turn on barrier effects without WDM/FDM'
 
   END SUBROUTINE assign_cosmology
 
@@ -875,19 +877,25 @@ CONTAINS
     TYPE(cosmology) :: cosm, cos_lcdm
     TYPE(tables) :: lut
     REAL :: A, zinf, ainf, zf, g_lcdm, g_wcdm, w
-	REAL :: Mhm,khm,kjeq,mu,alp
+	REAL :: Mhm,khm,kjeq,mu,alp ! WDM and FDM params
+	REAL :: omdh2,zeq,thet ! For half modes
 	REAL, PARAMETER :: pi=3.141592654
     INTEGER :: i
 
 	! Wfcode: the WDM and FDM half mode masses from the analytic transfer functions
-
+        ! See Plin for transfer function definitions.
+        thet=2.78/2.7 ! Used to set zeq as in Eisenstein and Hu transfer function
+        zeq=2.50e4*cosm%om_m*cosm%h**2./thet**4.
+	omdh2=(cosm%om_m-cosm%om_b)*cosm%h**2.
 	IF(iwdm==1) THEN
 		mu=1.12
-	    alp=0.052*(cosm%m_wdm**(-1.15))
+	    	!alp=0.052*(cosm%m_wdm**(-1.15)) foobar
+		alp=0.361*0.201*(omdh2/0.15)**0.15*(cosm%gx/1.5)**(-0.29)*(cosm%m_wdm**(-1.15))*cosm%h
 		khm=((0.5)**(-mu/5.)-1.)**(1/(2.*mu))/alp
 		Mhm=mass_r(pi/khm,cosm)
 	ELSE IF(ifdm==1) THEN
-		kjeq=9*cosm%m_fdm**(0.5)/cosm%h 
+		!kjeq=9*cosm%m_fdm**(0.5)/cosm%h 
+                kjeq=8.7*((1.+zeq)/3394)**(-0.25)*(omdh2/0.12)**0.25*cosm%m_fdm**(0.5)/cosm%h
 		khm=0.5*cosm%m_fdm**(-1/18.)*kjeq
 		Mhm=mass_r(pi/khm,cosm)
 	END IF
@@ -1168,6 +1176,7 @@ CONTAINS
     REAL, INTENT (IN) :: k, z
     REAL :: mu, alp ! WDM params
 	REAL :: kjeq,xj ! FDM params
+	REAL :: omdh2,zeq,thet ! For WDM and FDM Transfer functions
     TYPE(cosmology), INTENT(IN) :: cosm
 
     !This gives the linear power spectrum for the model in question
@@ -1189,16 +1198,23 @@ CONTAINS
        p_lin=(cosm%A**2.)*(grow(z,cosm)**2.)*(Tk(k,cosm)**2.)*(k**(cosm%n+3.))
     END IF
 
+    thet=2.78/2.7 ! Used to set zeq as in Eisenstein and Hu transfer function
+    zeq=2.50e4*cosm%om_m*cosm%h**2./thet**4.
+    omdh2=(cosm%om_m-cosm%om_b)*cosm%h**2.
     IF(iwdm==1) THEN
-       ! WDM transfer function, Bode et al (2001)
+       ! WDM transfer function, Bode et al (2001) 
+       ! Added gx, omdh2, h dependence following Barkana et al (2001)
        mu=1.12
-       alp=0.052*(cosm%m_wdm**(-1.15))    
+       !alp=0.052*(cosm%m_wdm**(-1.15))
+	alp=0.361*0.201*(omdh2/0.15)**0.15*(cosm%gx/1.5)**(-0.29)*(cosm%m_wdm**(-1.15))*cosm%h 
        p_lin=p_lin*((1.+(alp*k)**(2.*mu))**(-10./mu))
     END IF
 
 	IF(ifdm==1) THEN
 	   ! FDM transfer function, Hu et al (2000)
-       kjeq=9*cosm%m_fdm**(0.5)/cosm%h ! Units used in this code are h Mpc^-1
+           ! Added omdh2, zeq dependence from e.g. Marsh (2015) review
+       !kjeq=9*cosm%m_fdm**(0.5)/cosm%h ! Units used in this code are h Mpc^-1
+        kjeq=8.7*((1.+zeq)/3394)**(-0.25)*(omdh2/0.12)**0.25*cosm%m_fdm**(0.5)/cosm%h
 	   xj=1.61*cosm%m_fdm**(1./18.)*k/kjeq
        p_lin=p_lin*(cos(xj**3.)/(1+xj**8.))**2.
     END IF
